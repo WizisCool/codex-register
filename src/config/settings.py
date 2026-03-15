@@ -301,7 +301,7 @@ SETTING_DEFINITIONS: Dict[str, SettingDefinition] = {
     # Outlook 配置
     "outlook_provider_priority": SettingDefinition(
         db_key="outlook.provider_priority",
-        default_value=["graph_api", "imap_new", "imap_old"],
+        default_value=["imap_old", "imap_new", "graph_api"],
         category=SettingCategory.EMAIL,
         description="Outlook 提供者优先级"
     ),
@@ -373,13 +373,31 @@ def _convert_value(attr_name: str, value: str) -> Any:
     elif target_type == dict:
         if isinstance(value, dict):
             return value
+        if not value:
+            return {}
         import json
-        return json.loads(value) if value else {}
+        import ast
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            try:
+                return ast.literal_eval(value)
+            except Exception:
+                return {}
     elif target_type == list:
         if isinstance(value, list):
             return value
+        if not value:
+            return []
         import json
-        return json.loads(value) if value else []
+        import ast
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            try:
+                return ast.literal_eval(value)
+            except Exception:
+                return []
     else:
         return value
 
@@ -568,7 +586,7 @@ class Settings(BaseModel):
     email_code_poll_interval: int = 3
 
     # Outlook 配置
-    outlook_provider_priority: List[str] = ["graph_api", "imap_new", "imap_old"]
+    outlook_provider_priority: List[str] = ["imap_old", "imap_new", "graph_api"]
     outlook_health_failure_threshold: int = 5
     outlook_health_disable_duration: int = 60
     outlook_default_client_id: str = "24d9a0ed-8787-4584-883c-2fd79308940a"

@@ -145,11 +145,12 @@ class GraphAPIProvider(OutlookProvider):
             )
 
             if resp.status_code == 401:
-                # Token 失效，清除缓存
+                # Token 无 Graph 权限（client_id 未授权），清除缓存但不记录健康失败
+                # 避免因权限不足导致健康检查器禁用该提供者，影响其他账户
                 if self._token_manager:
                     self._token_manager.clear_cache()
-                self.record_failure(f"HTTP 401: Token 失效")
-                logger.error(f"[{self.account.email}] Graph API Token 失效")
+                self._connected = False
+                logger.warning(f"[{self.account.email}] Graph API 返回 401，client_id 可能无 Graph 权限，跳过")
                 return []
 
             if resp.status_code != 200:

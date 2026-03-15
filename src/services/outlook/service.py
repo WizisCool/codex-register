@@ -25,10 +25,12 @@ logger = logging.getLogger(__name__)
 
 
 # 默认提供者优先级
+# IMAP_OLD 最兼容（只需 login.live.com token），IMAP_NEW 次之，Graph API 最后
+# 原因：部分 client_id 没有 Graph API 权限，但有 IMAP 权限
 DEFAULT_PROVIDER_PRIORITY = [
-    ProviderType.GRAPH_API,
-    ProviderType.IMAP_NEW,
     ProviderType.IMAP_OLD,
+    ProviderType.IMAP_NEW,
+    ProviderType.GRAPH_API,
 ]
 
 

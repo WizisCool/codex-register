@@ -132,7 +132,8 @@ OTP_CODE_SEMANTIC_PATTERN = r'(?:code\s+is|验证码[是为]?\s*[:：]?\s*)(\d{6
 OPENAI_EMAIL_SENDERS = [
     "noreply@openai.com",
     "no-reply@openai.com",
-    "@openai.com",  # 通配符匹配
+    "@openai.com",     # 精确域名匹配
+    ".openai.com",     # 子域名匹配（如 otp@tm1.openai.com）
 ]
 
 # OpenAI 验证邮件关键词
