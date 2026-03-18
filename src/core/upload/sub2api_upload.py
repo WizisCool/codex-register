@@ -51,15 +51,37 @@ def upload_to_sub2api(
     for acc in accounts:
         if not acc.access_token:
             continue
+        expires_at = int(acc.expires_at.timestamp()) if acc.expires_at else 0
         account_items.append({
             "name": acc.email,
             "platform": "openai",
             "type": "oauth",
             "credentials": {
                 "access_token": acc.access_token,
+                "chatgpt_account_id": acc.account_id or "",
+                "chatgpt_user_id": "",
+                "client_id": acc.client_id or "",
+                "expires_at": expires_at,
+                "expires_in": 863999,
+                "model_mapping": {
+                    "gpt-5.1": "gpt-5.1",
+                    "gpt-5.1-codex": "gpt-5.1-codex",
+                    "gpt-5.1-codex-max": "gpt-5.1-codex-max",
+                    "gpt-5.1-codex-mini": "gpt-5.1-codex-mini",
+                    "gpt-5.2": "gpt-5.2",
+                    "gpt-5.2-codex": "gpt-5.2-codex",
+                    "gpt-5.3": "gpt-5.3",
+                    "gpt-5.3-codex": "gpt-5.3-codex",
+                    "gpt-5.4": "gpt-5.4"
+                },
+                "organization_id": acc.workspace_id or "",
+                "refresh_token": acc.refresh_token or "",
             },
+            "extra": {},
             "concurrency": concurrency,
             "priority": priority,
+            "rate_multiplier": 1,
+            "auto_pause_on_expired": True,
         })
 
     if not account_items:
