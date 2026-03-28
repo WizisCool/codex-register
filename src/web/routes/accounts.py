@@ -759,7 +759,7 @@ async def codex_auth_login(request: CodexAuthLoginRequest):
         log_queue.put(("log", msg))
 
     def run_login():
-        from ...core.codex_auth import CodexAuthEngine
+        from core.openai.codex_auth import CodexAuthEngine
         try:
             engine = CodexAuthEngine(
                 email=email,
@@ -876,7 +876,7 @@ async def codex_auth_login_batch(request: CodexAuthBatchRequest):
     log_queue = queue.Queue()
 
     def run_batch():
-        from ...core.codex_auth import CodexAuthEngine
+        from core.openai.codex_auth import CodexAuthEngine
         results = []
 
         for i, acc_data in enumerate(accounts_data):

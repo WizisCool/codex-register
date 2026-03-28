@@ -541,7 +541,6 @@ def delete_proxy(db: Session, proxy_id: int) -> bool:
     db.commit()
     return True
 
-
 def delete_disabled_proxies(db: Session) -> int:
     """删除所有已禁用代理"""
     deleted = (

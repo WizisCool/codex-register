@@ -7,15 +7,15 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from .openai.oauth import OAuthManager
-from .register import PhaseContext, RegistrationEngine
-from ..config.constants import (
+from core.openai.oauth import OAuthManager
+from core.register import PhaseContext, RegistrationEngine
+from config.constants import (
     CODEX_OAUTH_ORIGINATOR,
     CODEX_OAUTH_REDIRECT_URI,
     CODEX_OAUTH_SCOPE,
 )
-from ..config.settings import get_settings
-from ..services.base import BaseEmailService
+from config.settings import get_settings
+from services.base import BaseEmailService
 
 
 @dataclass

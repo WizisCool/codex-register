@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-import src.core.codex_auth as codex_auth_module
-from src.core.codex_auth import CodexAuthEngine
+import core.openai.codex_auth as codex_auth_module
+from core.openai.codex_auth import CodexAuthEngine
 from src.core.register import PhaseResult, RegistrationEngine
 from src.services import EmailServiceType
 

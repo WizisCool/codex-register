@@ -345,13 +345,16 @@ class LoginEngine(RegistrationEngine):
                 return result
 
             self._log("10. 等待验证码...")
-            code = self._get_verification_code()
+            code, otp_phase = self._await_verification_code_with_resends(
+                self._send_verification_code,
+                timeout_retry_log_template="10. 收件箱未找到验证码，第 {attempt} 次重新发送验证码...",
+                non_openai_retry_log_template="10. 检测到非 OpenAI 发件人干扰，第 {attempt} 次重新发送验证码...",
+            )
             if not code:
-                self._log("10. 验证码超时，重新发送...")
-                if self._send_verification_code():
-                    code = self._get_verification_code()
-            if not code:
-                result.error_message = "获取验证码失败"
+                result.error_message = (
+                    otp_phase.error_message if otp_phase and otp_phase.error_message else "获取验证码失败"
+                )
+                result.error_code = otp_phase.error_code if otp_phase else ""
                 return result
 
             self._log("11. 验证验证码...")
@@ -380,13 +383,16 @@ class LoginEngine(RegistrationEngine):
                 return result
 
             self._log("15. 等待验证码...")
-            code = self._get_verification_code()
+            code, otp_phase = self._await_verification_code_with_resends(
+                self._send_verification_code_passwordless,
+                timeout_retry_log_template="15. 收件箱未找到验证码，第 {attempt} 次重新发送验证码...",
+                non_openai_retry_log_template="15. 检测到非 OpenAI 发件人干扰，第 {attempt} 次重新发送验证码...",
+            )
             if not code:
-                self._log("15. 验证码超时，重新发送...")
-                if self._send_verification_code_passwordless():
-                    code = self._get_verification_code()
-            if not code:
-                result.error_message = "获取验证码失败"
+                result.error_message = (
+                    otp_phase.error_message if otp_phase and otp_phase.error_message else "获取验证码失败"
+                )
+                result.error_code = otp_phase.error_code if otp_phase else ""
                 return result
 
             self._log("16. 验证验证码...")

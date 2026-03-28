@@ -6,11 +6,9 @@ Freemail 邮箱服务实现
 import re
 import time
 import logging
-import random
-import string
 from typing import Optional, Dict, Any, List
 
-from .base import BaseEmailService, EmailServiceError, EmailServiceType, RateLimitedEmailServiceError, get_email_code_settings
+from .base import BaseEmailService, EmailServiceError, EmailServiceType, OTPNoOpenAISenderEmailServiceError, RateLimitedEmailServiceError, get_email_code_settings
 from ..core.http_client import HTTPClient, RequestConfig
 from ..config.constants import OTP_CODE_PATTERN
 
@@ -216,10 +214,11 @@ class FreemailService(BaseEmailService):
         seen_mail_ids: set = set()
 
         while time.time() - start_time < timeout:
+            self._raise_if_cancelled("等待 Freemail 验证码时任务已取消")
             try:
                 mails = self._make_request("GET", "/api/emails", params={"mailbox": email, "limit": 20})
                 if not isinstance(mails, list):
-                    time.sleep(poll_interval)
+                    self._sleep_with_cancel(poll_interval)
                     continue
 
                 ordered_mails = self._sort_items_by_message_time(
@@ -231,6 +230,17 @@ class FreemailService(BaseEmailService):
                         or item.get("receivedAt")
                     ) if isinstance(item, dict) else None,
                 )
+
+                if ordered_mails:
+                    sender_values = [
+                        mail for mail in ordered_mails
+                        if isinstance(mail, dict) and mail.get("sender")
+                    ]
+                    if sender_values and not self._batch_has_openai_sender(
+                        sender_values,
+                        lambda item: item.get("sender"),
+                    ):
+                        raise OTPNoOpenAISenderEmailServiceError()
 
                 for mail in ordered_mails:
                     mail_id = mail.get("id")
@@ -252,7 +262,7 @@ class FreemailService(BaseEmailService):
                     
                     content = f"{sender}\n{subject}\n{preview}"
                     
-                    if "openai" not in content.lower():
+                    if not self._is_openai_candidate_message(sender, subject, preview):
                         continue
 
                     code = self._extract_otp_from_text(content, pattern)
@@ -286,9 +296,11 @@ class FreemailService(BaseEmailService):
                         return v_code
 
             except Exception as e:
+                if isinstance(e, OTPNoOpenAISenderEmailServiceError):
+                    raise
                 logger.debug(f"检查 Freemail 邮件时出错: {e}")
 
-            time.sleep(poll_interval)
+            self._sleep_with_cancel(poll_interval)
 
         logger.warning(f"等待 Freemail 验证码超时: {email}")
         return None

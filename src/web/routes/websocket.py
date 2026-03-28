@@ -86,7 +86,14 @@ async def task_websocket(websocket: WebSocket, task_uuid: str):
 
                 # 处理取消请求
                 elif data.get("type") == "cancel":
-                    task_manager.cancel_task(task_uuid)
+                    from . import registration as registration_routes
+
+                    with get_db() as db:
+                        task = crud.get_registration_task(db, task_uuid)
+                        if task and task.status in ["pending", "running"]:
+                            registration_routes._request_task_cancellation(db, task_uuid)
+                        else:
+                            task_manager.cancel_task(task_uuid)
                     await websocket.send_json({
                         "type": "status",
                         "task_uuid": task_uuid,
@@ -163,7 +170,9 @@ async def batch_websocket(websocket: WebSocket, batch_id: str):
 
                 # 处理取消请求
                 elif data.get("type") == "cancel":
-                    task_manager.cancel_batch(batch_id)
+                    from . import registration as registration_routes
+
+                    registration_routes._request_batch_cancellation(batch_id)
                     await websocket.send_json({
                         "type": "status",
                         "batch_id": batch_id,
