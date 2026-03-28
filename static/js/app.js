@@ -98,6 +98,9 @@ const elements = {
     autoUploadNewapi: document.getElementById('auto-upload-newapi'),
     newapiServiceSelectGroup: document.getElementById('newapi-service-select-group'),
     newapiServiceSelect: document.getElementById('newapi-service-select'),
+    autoUploadCodex2api: document.getElementById('auto-upload-codex2api'),
+    codex2apiServiceSelectGroup: document.getElementById('codex2api-service-select-group'),
+    codex2apiServiceSelect: document.getElementById('codex2api-service-select'),
 };
 
 // 初始化
@@ -111,13 +114,14 @@ document.addEventListener('DOMContentLoaded', () => {
     initAutoUploadOptions();
 });
 
-// 初始化注册后自动操作选项（CPA / Sub2API / TM）
+// 初始化注册后自动操作选项（CPA / Sub2API / TM / NEWAPI / Codex2API）
 async function initAutoUploadOptions() {
     await Promise.all([
         loadServiceSelect('/cpa-services?enabled=true', elements.cpaServiceSelect, elements.autoUploadCpa, elements.cpaServiceSelectGroup),
         loadServiceSelect('/sub2api-services?enabled=true', elements.sub2apiServiceSelect, elements.autoUploadSub2api, elements.sub2apiServiceSelectGroup),
         loadServiceSelect('/tm-services?enabled=true', elements.tmServiceSelect, elements.autoUploadTm, elements.tmServiceSelectGroup),
         loadServiceSelect('/newapi-services?enabled=true', elements.newapiServiceSelect, elements.autoUploadNewapi, elements.newapiServiceSelectGroup),
+        loadServiceSelect('/codex2api-services?enabled=true', elements.codex2apiServiceSelect, elements.autoUploadCodex2api, elements.codex2apiServiceSelectGroup),
     ]);
 }
 
@@ -509,6 +513,8 @@ async function handleStartRegistration(e) {
         tm_service_ids: elements.autoUploadTm && elements.autoUploadTm.checked ? getSelectedServiceIds(elements.tmServiceSelect) : [],
         auto_upload_newapi: elements.autoUploadNewapi ? elements.autoUploadNewapi.checked : false,
         newapi_service_ids: elements.autoUploadNewapi && elements.autoUploadNewapi.checked ? getSelectedServiceIds(elements.newapiServiceSelect) : [],
+        auto_upload_codex2api: elements.autoUploadCodex2api ? elements.autoUploadCodex2api.checked : false,
+        codex2api_service_ids: elements.autoUploadCodex2api && elements.autoUploadCodex2api.checked ? getSelectedServiceIds(elements.codex2apiServiceSelect) : [],
     };
 
     // 如果选择了数据库中的服务，传递 service_id

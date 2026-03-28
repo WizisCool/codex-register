@@ -79,6 +79,15 @@ const elements = {
     cancelNewapiServiceBtn: document.getElementById('cancel-newapi-service-btn'),
     newapiServiceForm: document.getElementById('newapi-service-form'),
     newapiServiceModalTitle: document.getElementById('newapi-service-modal-title'),
+    // Codex2API 服务管理
+    addCodex2apiServiceBtn: document.getElementById('add-codex2api-service-btn'),
+    codex2apiServicesTable: document.getElementById('codex2api-services-table'),
+    codex2apiServiceEditModal: document.getElementById('codex2api-service-edit-modal'),
+    closeCodex2apiServiceModal: document.getElementById('close-codex2api-service-modal'),
+    cancelCodex2apiServiceBtn: document.getElementById('cancel-codex2api-service-btn'),
+    codex2apiServiceForm: document.getElementById('codex2api-service-form'),
+    codex2apiServiceModalTitle: document.getElementById('codex2api-service-modal-title'),
+    testCodex2apiServiceBtn: document.getElementById('test-codex2api-service-btn'),
     // 验证码设置
     emailCodeForm: document.getElementById('email-code-form'),
     // Outlook 设置
@@ -101,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSub2ApiServices();
     loadTmServices();
     loadNewapiServices();
+    loadCodex2apiServices();
     initEventListeners();
 });
 
@@ -374,6 +384,28 @@ function initEventListeners() {
     }
     if (elements.testSub2ApiServiceBtn) {
         elements.testSub2ApiServiceBtn.addEventListener('click', handleTestSub2ApiService);
+    }
+
+    // Codex2API 服务管理
+    if (elements.addCodex2apiServiceBtn) {
+        elements.addCodex2apiServiceBtn.addEventListener('click', () => openCodex2apiServiceModal());
+    }
+    if (elements.closeCodex2apiServiceModal) {
+        elements.closeCodex2apiServiceModal.addEventListener('click', closeCodex2apiServiceModal);
+    }
+    if (elements.cancelCodex2apiServiceBtn) {
+        elements.cancelCodex2apiServiceBtn.addEventListener('click', closeCodex2apiServiceModal);
+    }
+    if (elements.codex2apiServiceEditModal) {
+        elements.codex2apiServiceEditModal.addEventListener('click', (e) => {
+            if (e.target === elements.codex2apiServiceEditModal) closeCodex2apiServiceModal();
+        });
+    }
+    if (elements.codex2apiServiceForm) {
+        elements.codex2apiServiceForm.addEventListener('submit', handleSaveCodex2apiService);
+    }
+    if (elements.testCodex2apiServiceBtn) {
+        elements.testCodex2apiServiceBtn.addEventListener('click', handleTestCodex2apiService);
     }
 }
 
@@ -1787,6 +1819,171 @@ async function handleTestSub2ApiService() {
     } finally {
         elements.testSub2ApiServiceBtn.disabled = false;
         elements.testSub2ApiServiceBtn.textContent = '🔌 测试连接';
+    }
+}
+
+// ============================================================================
+// Codex2API 服务管理
+// ============================================================================
+
+async function loadCodex2apiServices() {
+    if (!elements.codex2apiServicesTable) return;
+    try {
+        const services = await api.get('/codex2api-services');
+        renderCodex2apiServicesTable(services);
+    } catch (e) {
+        elements.codex2apiServicesTable.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger-color);">${e.message}</td></tr>`;
+    }
+}
+
+function renderCodex2apiServicesTable(services) {
+    if (!services || services.length === 0) {
+        elements.codex2apiServicesTable.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;">暂无 Codex2API 服务，点击「添加服务」新增</td></tr>';
+        return;
+    }
+    elements.codex2apiServicesTable.innerHTML = services.map(s => `
+        <tr>
+            <td>${escapeHtml(s.name)}</td>
+            <td style="font-size:0.85rem;color:var(--text-muted);">${escapeHtml(s.api_url)}</td>
+            <td style="text-align:center;" title="${s.enabled ? '已启用' : '已禁用'}">${s.enabled ? '✅' : '⭕'}</td>
+            <td style="text-align:center;" title="${s.include_proxy_url ? '上传 proxy_url' : '不上传 proxy_url'}">${s.include_proxy_url ? '🔓' : '🔒'}</td>
+            <td style="text-align:center;">${s.priority}</td>
+            <td style="white-space:nowrap;">
+                <button class="btn btn-secondary btn-sm" onclick="editCodex2apiService(${s.id})">编辑</button>
+                <button class="btn btn-secondary btn-sm" onclick="testCodex2apiServiceById(${s.id})">测试</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteCodex2apiService(${s.id}, '${escapeHtml(s.name)}')">删除</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function openCodex2apiServiceModal(service = null) {
+    document.getElementById('codex2api-service-id').value = service ? service.id : '';
+    document.getElementById('codex2api-service-name').value = service ? service.name : '';
+    document.getElementById('codex2api-service-url').value = service ? service.api_url : '';
+    document.getElementById('codex2api-service-key').value = '';
+    document.getElementById('codex2api-service-priority').value = service ? service.priority : 0;
+    document.getElementById('codex2api-service-enabled').checked = service ? service.enabled : true;
+    document.getElementById('codex2api-service-include-proxy-url').checked = service ? service.include_proxy_url : true;
+    if (service) {
+        document.getElementById('codex2api-service-key').placeholder = service.has_key ? '已配置，留空保持不变' : '请输入 Admin Key';
+    } else {
+        document.getElementById('codex2api-service-key').placeholder = '请输入 Admin Key';
+    }
+    elements.codex2apiServiceModalTitle.textContent = service ? '编辑 Codex2API 服务' : '添加 Codex2API 服务';
+    elements.codex2apiServiceEditModal.classList.add('active');
+}
+
+function closeCodex2apiServiceModal() {
+    elements.codex2apiServiceEditModal.classList.remove('active');
+}
+
+async function editCodex2apiService(id) {
+    try {
+        const service = await api.get(`/codex2api-services/${id}`);
+        openCodex2apiServiceModal(service);
+    } catch (e) {
+        toast.error('获取服务信息失败: ' + e.message);
+    }
+}
+
+async function handleSaveCodex2apiService(e) {
+    e.preventDefault();
+    const id = document.getElementById('codex2api-service-id').value;
+    const name = document.getElementById('codex2api-service-name').value.trim();
+    const apiUrl = document.getElementById('codex2api-service-url').value.trim();
+    const apiKey = document.getElementById('codex2api-service-key').value.trim();
+    const priority = parseInt(document.getElementById('codex2api-service-priority').value) || 0;
+    const enabled = document.getElementById('codex2api-service-enabled').checked;
+    const includeProxyUrl = document.getElementById('codex2api-service-include-proxy-url').checked;
+
+    if (!name || !apiUrl) {
+        toast.error('名称和 API URL 不能为空');
+        return;
+    }
+    if (!id && !apiKey) {
+        toast.error('新增服务时 Admin Key 不能为空');
+        return;
+    }
+
+    try {
+        const payload = { name, api_url: apiUrl, priority, enabled, include_proxy_url: includeProxyUrl };
+        if (apiKey) payload.api_key = apiKey;
+
+        if (id) {
+            await api.patch(`/codex2api-services/${id}`, payload);
+            toast.success('服务已更新');
+        } else {
+            payload.api_key = apiKey;
+            await api.post('/codex2api-services', payload);
+            toast.success('服务已添加');
+        }
+        closeCodex2apiServiceModal();
+        loadCodex2apiServices();
+    } catch (e) {
+        toast.error('保存失败: ' + e.message);
+    }
+}
+
+async function deleteCodex2apiService(id, name) {
+    const confirmed = await confirm(`确定要删除 Codex2API 服务「${name}」吗？`);
+    if (!confirmed) return;
+    try {
+        await api.delete(`/codex2api-services/${id}`);
+        toast.success('已删除');
+        loadCodex2apiServices();
+    } catch (e) {
+        toast.error('删除失败: ' + e.message);
+    }
+}
+
+async function testCodex2apiServiceById(id) {
+    try {
+        const result = await api.post(`/codex2api-services/${id}/test`);
+        if (result.success) {
+            toast.success(result.message);
+        } else {
+            toast.error(result.message);
+        }
+    } catch (e) {
+        toast.error('测试失败: ' + e.message);
+    }
+}
+
+async function handleTestCodex2apiService() {
+    const apiUrl = document.getElementById('codex2api-service-url').value.trim();
+    const apiKey = document.getElementById('codex2api-service-key').value.trim();
+    const id = document.getElementById('codex2api-service-id').value;
+
+    if (!apiUrl) {
+        toast.error('请先填写 API URL');
+        return;
+    }
+    if (!id && !apiKey) {
+        toast.error('请先填写 Admin Key');
+        return;
+    }
+
+    elements.testCodex2apiServiceBtn.disabled = true;
+    elements.testCodex2apiServiceBtn.textContent = '测试中...';
+
+    try {
+        let result;
+        if (id && !apiKey) {
+            result = await api.post(`/codex2api-services/${id}/test`);
+        } else {
+            result = await api.post('/codex2api-services/test-connection', { api_url: apiUrl, api_key: apiKey });
+        }
+        if (result.success) {
+            toast.success(result.message);
+        } else {
+            toast.error(result.message);
+        }
+    } catch (e) {
+        toast.error('测试失败: ' + e.message);
+    } finally {
+        elements.testCodex2apiServiceBtn.disabled = false;
+        elements.testCodex2apiServiceBtn.textContent = '🔌 测试连接';
     }
 }
 

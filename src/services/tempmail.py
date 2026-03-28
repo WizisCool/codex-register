@@ -5,10 +5,17 @@ Tempmail.lol 邮箱服务实现
 import re
 import time
 import logging
+import random
+import string
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
-from .base import BaseEmailService, EmailServiceError, EmailServiceType, get_email_code_settings
+from .base import (
+    BaseEmailService,
+    EmailServiceError,
+    EmailServiceType,
+    get_email_code_settings,
+)
 from ..core.http_client import HTTPClient, RequestConfig
 from ..config.constants import OTP_CODE_PATTERN
 
@@ -16,6 +23,13 @@ from ..config.constants import OTP_CODE_PATTERN
 logger = logging.getLogger(__name__)
 
 OTP_SENT_AT_TOLERANCE_SECONDS = 2
+
+
+def generate_random_subdomain(length: int = 8) -> str:
+    """生成随机子域名字符串"""
+    # 使用小写字母和数字，避免特殊字符
+    chars = string.ascii_lowercase + string.digits
+    return "".join(random.choices(chars, k=length))
 
 
 class TempmailService(BaseEmailService):
@@ -31,9 +45,13 @@ class TempmailService(BaseEmailService):
         Args:
             config: 配置字典，支持以下键:
                 - base_url: API 基础地址 (默认: https://api.tempmail.lol/v2)
+                - api_key: API 密钥 (Plus/Ultra 用户可选)
                 - timeout: 请求超时时间 (默认: 30)
                 - max_retries: 最大重试次数 (默认: 3)
                 - proxy_url: 代理 URL
+                - custom_domain: 自定义域名 (Plus/Ultra 用户可选，如 mydomain.com)
+                - enable_random_subdomain: 是否启用随机子域 (默认: False)
+                - subdomain_length: 随机子域长度 (默认: 8)
             name: 服务名称
         """
         super().__init__(EmailServiceType.TEMPMAIL, name)
@@ -41,9 +59,13 @@ class TempmailService(BaseEmailService):
         # 默认配置
         default_config = {
             "base_url": "https://api.tempmail.lol/v2",
+            "api_key": "",
             "timeout": 30,
             "max_retries": 3,
             "proxy_url": None,
+            "custom_domain": "",
+            "enable_random_subdomain": False,
+            "subdomain_length": 8,
         }
 
         self.config = {**default_config, **(config or {})}
@@ -54,13 +76,30 @@ class TempmailService(BaseEmailService):
             max_retries=self.config["max_retries"],
         )
         self.http_client = HTTPClient(
-            proxy_url=self.config.get("proxy_url"),
-            config=http_config
+            proxy_url=self.config.get("proxy_url"), config=http_config
         )
 
         # 状态变量（内存缓存，重启后从 DB 按需查询）
         self._email_cache: Dict[str, Dict[str, Any]] = {}
         self._last_check_time: float = 0
+
+    def _get_headers(self) -> Dict[str, str]:
+        """获取 API 请求头，包含 API Key 认证（如果配置了）"""
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+        # 添加 API Key 认证（Plus/Ultra 用户）
+        api_key = self.config.get("api_key", "")
+        # 处理 SecretStr 类型
+        if hasattr(api_key, "get_secret_value"):
+            api_key = api_key.get_secret_value()
+        api_key = str(api_key).strip() if api_key else ""
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        return headers
 
     def _parse_message_time(self, value: Any) -> Optional[float]:
         """解析 Tempmail 邮件时间，兼容 Unix 时间戳与 ISO 8601。"""
@@ -79,7 +118,11 @@ class TempmailService(BaseEmailService):
             except ValueError:
                 try:
                     normalized = text.replace("Z", "+00:00")
-                    timestamp = datetime.fromisoformat(normalized).astimezone(timezone.utc).timestamp()
+                    timestamp = (
+                        datetime.fromisoformat(normalized)
+                        .astimezone(timezone.utc)
+                        .timestamp()
+                    )
                 except Exception:
                     return None
 
@@ -89,7 +132,13 @@ class TempmailService(BaseEmailService):
 
     def _get_received_timestamp(self, message: Dict[str, Any]) -> Optional[float]:
         """返回 Tempmail 邮件的接收时间戳。"""
-        for field_name in ("received_at", "date", "created_at", "createdAt", "timestamp"):
+        for field_name in (
+            "received_at",
+            "date",
+            "created_at",
+            "createdAt",
+            "timestamp",
+        ):
             timestamp = self._parse_message_time(message.get(field_name))
             if timestamp is not None:
                 return timestamp
@@ -100,6 +149,7 @@ class TempmailService(BaseEmailService):
         try:
             from ..database.session import get_db
             from ..database.crud import set_setting
+
             with get_db() as db:
                 set_setting(db, f"tempmail_token:{email}", token, category="tempmail")
         except Exception as e:
@@ -110,6 +160,7 @@ class TempmailService(BaseEmailService):
         try:
             from ..database.session import get_db
             from ..database.crud import get_setting
+
             with get_db() as db:
                 setting = get_setting(db, f"tempmail_token:{email}")
                 return setting.value if setting else None
@@ -122,7 +173,9 @@ class TempmailService(BaseEmailService):
         创建新的临时邮箱
 
         Args:
-            config: 配置参数（Tempmail.lol 目前不支持自定义配置）
+            config: 配置参数，支持:
+                - domain: 指定域名（覆盖配置中的 custom_domain）
+                - prefix: 指定前缀（覆盖随机子域）
 
         Returns:
             包含邮箱信息的字典:
@@ -132,19 +185,52 @@ class TempmailService(BaseEmailService):
             - created_at: 创建时间戳
         """
         try:
+            # 构建请求体
+            request_body = {}
+
+            # 处理自定义域名和子域
+            custom_domain = self.config.get("custom_domain", "")
+            # 处理 SecretStr 类型
+            if hasattr(custom_domain, "get_secret_value"):
+                custom_domain = custom_domain.get_secret_value()
+            custom_domain = str(custom_domain).strip() if custom_domain else ""
+            enable_subdomain = self.config.get("enable_random_subdomain", False)
+
+            if custom_domain:
+                # 使用自定义域名
+                if enable_subdomain:
+                    # 生成随机子域前缀
+                    subdomain_length = self.config.get("subdomain_length", 8)
+                    prefix = generate_random_subdomain(subdomain_length)
+                    request_body["domain"] = f"{prefix}.{custom_domain}"
+                    logger.info(f"使用随机子域: {request_body['domain']}")
+                else:
+                    # 直接使用根域名
+                    request_body["domain"] = custom_domain
+                    logger.info(f"使用自定义域名: {custom_domain}")
+
+            # 合并传入的配置参数（优先级更高）
+            if config:
+                if config.get("domain"):
+                    request_body["domain"] = config["domain"]
+                if config.get("prefix"):
+                    request_body["prefix"] = config["prefix"]
+
             # 发送创建请求
             response = self.http_client.post(
                 f"{self.config['base_url']}/inbox/create",
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                },
-                json={}
+                headers=self._get_headers(),
+                json=request_body,
             )
 
             if response.status_code not in (200, 201):
-                self.update_status(False, EmailServiceError(f"请求失败，状态码: {response.status_code}"))
-                raise EmailServiceError(f"Tempmail.lol 请求失败，状态码: {response.status_code}")
+                self.update_status(
+                    False,
+                    EmailServiceError(f"请求失败，状态码: {response.status_code}"),
+                )
+                raise EmailServiceError(
+                    f"Tempmail.lol 请求失败，状态码: {response.status_code}"
+                )
 
             data = response.json()
             email = str(data.get("address", "")).strip()
@@ -222,7 +308,7 @@ class TempmailService(BaseEmailService):
                 response = self.http_client.get(
                     f"{self.config['base_url']}/inbox",
                     params={"token": token},
-                    headers={"Accept": "application/json"}
+                    headers={"Accept": "application/json"},
                 )
 
                 if response.status_code != 200:
@@ -253,8 +339,13 @@ class TempmailService(BaseEmailService):
 
                     msg_timestamp = self._get_received_timestamp(msg)
                     if otp_sent_at is not None:
-                        min_allowed_timestamp = otp_sent_at - OTP_SENT_AT_TOLERANCE_SECONDS
-                        if msg_timestamp is None or msg_timestamp <= min_allowed_timestamp:
+                        min_allowed_timestamp = (
+                            otp_sent_at - OTP_SENT_AT_TOLERANCE_SECONDS
+                        )
+                        if (
+                            msg_timestamp is None
+                            or msg_timestamp <= min_allowed_timestamp
+                        ):
                             continue
 
                     message_id = str(
@@ -283,7 +374,9 @@ class TempmailService(BaseEmailService):
                     match = re.search(pattern, content)
                     if match:
                         code = match.group(1)
-                        if not self._accept_verification_code(email, code, message_marker):
+                        if not self._accept_verification_code(
+                            email, code, message_marker
+                        ):
                             continue
                         logger.info(f"找到验证码: {code}")
                         self.update_status(True)
@@ -331,7 +424,8 @@ class TempmailService(BaseEmailService):
         try:
             response = self.http_client.get(
                 f"{self.config['base_url']}/inbox/create",
-                timeout=10
+                headers=self._get_headers(),
+                timeout=10,
             )
             # 即使返回错误状态码也认为服务可用（只要可以连接）
             self.update_status(True)
@@ -355,7 +449,7 @@ class TempmailService(BaseEmailService):
             response = self.http_client.get(
                 f"{self.config['base_url']}/inbox",
                 params={"token": token},
-                headers={"Accept": "application/json"}
+                headers={"Accept": "application/json"},
             )
 
             if response.status_code != 200:
@@ -367,11 +461,7 @@ class TempmailService(BaseEmailService):
             return None
 
     def wait_for_verification_code_with_callback(
-        self,
-        email: str,
-        token: str,
-        callback: callable = None,
-        timeout: int = 120
+        self, email: str, token: str, callback: callable = None, timeout: int = 120
     ) -> Optional[str]:
         """
         等待验证码并支持回调函数
@@ -394,12 +484,14 @@ class TempmailService(BaseEmailService):
             check_count += 1
 
             if callback:
-                callback({
-                    "status": "checking",
-                    "email": email,
-                    "check_count": check_count,
-                    "elapsed_time": time.time() - start_time,
-                })
+                callback(
+                    {
+                        "status": "checking",
+                        "email": email,
+                        "check_count": check_count,
+                        "elapsed_time": time.time() - start_time,
+                    }
+                )
 
             try:
                 data = self.get_inbox(token)
@@ -410,11 +502,13 @@ class TempmailService(BaseEmailService):
                 # 检查 inbox 是否过期
                 if data is None or (isinstance(data, dict) and not data):
                     if callback:
-                        callback({
-                            "status": "expired",
-                            "email": email,
-                            "message": "邮箱已过期"
-                        })
+                        callback(
+                            {
+                                "status": "expired",
+                                "email": email,
+                                "message": "邮箱已过期",
+                            }
+                        )
                     return None
 
                 email_list = data.get("emails", []) if isinstance(data, dict) else []
@@ -441,38 +535,40 @@ class TempmailService(BaseEmailService):
                     if match:
                         code = match.group(1)
                         if callback:
-                            callback({
-                                "status": "found",
-                                "email": email,
-                                "code": code,
-                                "message": "找到验证码"
-                            })
+                            callback(
+                                {
+                                    "status": "found",
+                                    "email": email,
+                                    "code": code,
+                                    "message": "找到验证码",
+                                }
+                            )
                         return code
 
                 if callback and check_count % 5 == 0:
-                    callback({
-                        "status": "waiting",
-                        "email": email,
-                        "check_count": check_count,
-                        "message": f"已检查 {len(seen_ids)} 封邮件，等待验证码..."
-                    })
+                    callback(
+                        {
+                            "status": "waiting",
+                            "email": email,
+                            "check_count": check_count,
+                            "message": f"已检查 {len(seen_ids)} 封邮件，等待验证码...",
+                        }
+                    )
 
             except Exception as e:
                 logger.debug(f"检查邮件时出错: {e}")
                 if callback:
-                    callback({
-                        "status": "error",
-                        "email": email,
-                        "error": str(e),
-                        "message": "检查邮件时出错"
-                    })
+                    callback(
+                        {
+                            "status": "error",
+                            "email": email,
+                            "error": str(e),
+                            "message": "检查邮件时出错",
+                        }
+                    )
 
             time.sleep(poll_interval)
 
         if callback:
-            callback({
-                "status": "timeout",
-                "email": email,
-                "message": "等待验证码超时"
-            })
+            callback({"status": "timeout", "email": email, "message": "等待验证码超时"})
         return None

@@ -39,6 +39,10 @@ const elements = {
     // 临时邮箱
     tempmailForm: document.getElementById('tempmail-form'),
     tempmailApi: document.getElementById('tempmail-api'),
+    tempmailApiKey: document.getElementById('tempmail-api-key'),
+    tempmailCustomDomain: document.getElementById('tempmail-custom-domain'),
+    tempmailEnableSubdomain: document.getElementById('tempmail-enable-subdomain'),
+    tempmailSubdomainLength: document.getElementById('tempmail-subdomain-length'),
     tempmailEnabled: document.getElementById('tempmail-enabled'),
     testTempmailBtn: document.getElementById('test-tempmail-btn'),
 
@@ -162,6 +166,16 @@ function initEventListeners() {
     // 临时邮箱配置
     elements.tempmailForm.addEventListener('submit', handleSaveTempmail);
     elements.testTempmailBtn.addEventListener('click', handleTestTempmail);
+
+    // 随机子域开关切换
+    if (elements.tempmailEnableSubdomain) {
+        elements.tempmailEnableSubdomain.addEventListener('change', (e) => {
+            const lengthGroup = document.getElementById('subdomain-length-group');
+            if (lengthGroup) {
+                lengthGroup.style.display = e.target.checked ? 'block' : 'none';
+            }
+        });
+    }
 
     // 点击其他地方关闭更多菜单
     document.addEventListener('click', () => {
@@ -393,11 +407,32 @@ async function loadTempmailConfig() {
     try {
         const settings = await api.get('/settings');
         if (settings.tempmail) {
-            elements.tempmailApi.value = settings.tempmail.api_url || '';
+            elements.tempmailApi.value = settings.tempmail.api_url || 'https://api.tempmail.lol/v2';
             elements.tempmailEnabled.checked = settings.tempmail.enabled !== false;
+
+            // 加载新字段（如果存在）
+            if (elements.tempmailApiKey) {
+                elements.tempmailApiKey.value = settings.tempmail.api_key || '';
+            }
+            if (elements.tempmailCustomDomain) {
+                elements.tempmailCustomDomain.value = settings.tempmail.custom_domain || '';
+            }
+            if (elements.tempmailEnableSubdomain) {
+                const enableSubdomain = settings.tempmail.enable_random_subdomain || false;
+                elements.tempmailEnableSubdomain.checked = enableSubdomain;
+                // 切换子域长度输入框显示
+                const lengthGroup = document.getElementById('subdomain-length-group');
+                if (lengthGroup) {
+                    lengthGroup.style.display = enableSubdomain ? 'block' : 'none';
+                }
+            }
+            if (elements.tempmailSubdomainLength) {
+                elements.tempmailSubdomainLength.value = settings.tempmail.subdomain_length || 8;
+            }
         }
     } catch (error) {
-        // 忽略错误
+        // 忽略错误，使用默认值
+        console.log('加载 Tempmail 配置失败:', error);
     }
 }
 
@@ -579,11 +614,35 @@ async function handleBatchDeleteOutlook() {
 async function handleSaveTempmail(e) {
     e.preventDefault();
     try {
-        await api.post('/settings/tempmail', {
-            api_url: elements.tempmailApi.value,
+        const config = {
+            api_url: elements.tempmailApi.value || 'https://api.tempmail.lol/v2',
             enabled: elements.tempmailEnabled.checked
+        };
+
+        // 添加新字段（如果存在）
+        if (elements.tempmailApiKey) {
+            config.api_key = elements.tempmailApiKey.value || '';
+        }
+        if (elements.tempmailCustomDomain) {
+            config.custom_domain = elements.tempmailCustomDomain.value || '';
+        }
+        if (elements.tempmailEnableSubdomain) {
+            config.enable_random_subdomain = elements.tempmailEnableSubdomain.checked;
+        }
+        if (elements.tempmailSubdomainLength) {
+            config.subdomain_length = parseInt(elements.tempmailSubdomainLength.value) || 8;
+        }
+
+        // 调试：打印发送的配置
+        console.log('[Frontend] 准备发送配置:', config);
+        console.log('[Frontend] 元素状态:', {
+            apiKey: elements.tempmailApiKey ? elements.tempmailApiKey.value : '元素不存在',
+            customDomain: elements.tempmailCustomDomain ? elements.tempmailCustomDomain.value : '元素不存在',
+            enableSubdomain: elements.tempmailEnableSubdomain ? elements.tempmailEnableSubdomain.checked : '元素不存在'
         });
-        toast.success('配置已保存');
+
+        await api.post('/settings/tempmail', config);
+        toast.success('Tempmail 配置已保存');
     } catch (error) {
         toast.error('保存失败: ' + error.message);
     }
@@ -594,10 +653,17 @@ async function handleTestTempmail() {
     elements.testTempmailBtn.disabled = true;
     elements.testTempmailBtn.textContent = '测试中...';
     try {
-        const result = await api.post('/email-services/test-tempmail', {
-            api_url: elements.tempmailApi.value
-        });
-        if (result.success) toast.success('临时邮箱连接正常');
+        const config = {
+            api_url: elements.tempmailApi.value || 'https://api.tempmail.lol/v2'
+        };
+
+        // 添加 API Key 如果存在
+        if (elements.tempmailApiKey && elements.tempmailApiKey.value) {
+            config.api_key = elements.tempmailApiKey.value;
+        }
+
+        const result = await api.post('/email-services/test-tempmail', config);
+        if (result.success) toast.success('Tempmail 连接正常');
         else toast.error('连接失败: ' + (result.error || '未知错误'));
     } catch (error) {
         toast.error('测试失败: ' + error.message);

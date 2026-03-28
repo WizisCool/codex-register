@@ -8,7 +8,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy import and_, or_, desc, asc, func
 
-from .models import Account, EmailService, RegistrationTask, Setting, Proxy, CpaService, Sub2ApiService, NewapiService
+from .models import (
+    Account,
+    EmailService,
+    RegistrationTask,
+    Setting,
+    Proxy,
+    CpaService,
+    Sub2ApiService,
+    NewapiService,
+    Codex2ApiService,
+)
 
 
 TOKEN_FIELD_NAMES = ("access_token", "refresh_token", "id_token", "session_token")
@@ -23,6 +33,7 @@ def _default_token_sync_status(token_values: Dict[str, Any]) -> str:
 # ============================================================================
 # 账户 CRUD
 # ============================================================================
+
 
 def create_account(
     db: Session,
@@ -39,7 +50,7 @@ def create_account(
     id_token: Optional[str] = None,
     cookies: Optional[str] = None,
     proxy_used: Optional[str] = None,
-    expires_at: Optional['datetime'] = None,
+    expires_at: Optional["datetime"] = None,
     extra_data: Optional[Dict[str, Any]] = None,
     status: Optional[str] = None,
     source: Optional[str] = None,
@@ -68,8 +79,8 @@ def create_account(
         proxy_used=proxy_used,
         expires_at=expires_at,
         extra_data=extra_data or {},
-        status=status or 'active',
-        source=source or 'register',
+        status=status or "active",
+        source=source or "register",
         registered_at=datetime.utcnow(),
         token_sync_status=token_sync_status or _default_token_sync_status(token_values),
         token_sync_updated_at=datetime.utcnow(),
@@ -96,7 +107,7 @@ def get_accounts(
     limit: int = 100,
     email_service: Optional[str] = None,
     status: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
 ) -> List[Account]:
     """获取账户列表（支持分页、筛选）"""
     query = db.query(Account)
@@ -111,7 +122,7 @@ def get_accounts(
         search_filter = or_(
             Account.email.ilike(f"%{search}%"),
             Account.account_id.ilike(f"%{search}%"),
-            Account.workspace_id.ilike(f"%{search}%")
+            Account.workspace_id.ilike(f"%{search}%"),
         )
         query = query.filter(search_filter)
 
@@ -119,11 +130,7 @@ def get_accounts(
     return query.all()
 
 
-def update_account(
-    db: Session,
-    account_id: int,
-    **kwargs
-) -> Optional[Account]:
+def update_account(db: Session, account_id: int, **kwargs) -> Optional[Account]:
     """更新账户信息"""
     db_account = get_account_by_id(db, account_id)
     if not db_account:
@@ -135,7 +142,9 @@ def update_account(
             field: kwargs.get(field, getattr(db_account, field))
             for field in TOKEN_FIELD_NAMES
         }
-        kwargs.setdefault("token_sync_status", _default_token_sync_status(persisted_token_values))
+        kwargs.setdefault(
+            "token_sync_status", _default_token_sync_status(persisted_token_values)
+        )
         kwargs["token_sync_updated_at"] = datetime.utcnow()
     for key, value in kwargs.items():
         if hasattr(db_account, key) and value is not None:
@@ -159,15 +168,17 @@ def delete_account(db: Session, account_id: int) -> bool:
 
 def delete_accounts_batch(db: Session, account_ids: List[int]) -> int:
     """批量删除账户"""
-    result = db.query(Account).filter(Account.id.in_(account_ids)).delete(synchronize_session=False)
+    result = (
+        db.query(Account)
+        .filter(Account.id.in_(account_ids))
+        .delete(synchronize_session=False)
+    )
     db.commit()
     return result
 
 
 def get_accounts_count(
-    db: Session,
-    email_service: Optional[str] = None,
-    status: Optional[str] = None
+    db: Session, email_service: Optional[str] = None, status: Optional[str] = None
 ) -> int:
     """获取账户数量"""
     query = db.query(func.count(Account.id))
@@ -185,13 +196,14 @@ def get_accounts_count(
 # 邮箱服务 CRUD
 # ============================================================================
 
+
 def create_email_service(
     db: Session,
     service_type: str,
     name: str,
     config: Dict[str, Any],
     enabled: bool = True,
-    priority: int = 0
+    priority: int = 0,
 ) -> EmailService:
     """创建邮箱服务配置"""
     db_service = EmailService(
@@ -199,7 +211,7 @@ def create_email_service(
         name=name,
         config=config,
         enabled=enabled,
-        priority=priority
+        priority=priority,
     )
     db.add(db_service)
     db.commit()
@@ -217,7 +229,7 @@ def get_email_services(
     service_type: Optional[str] = None,
     enabled: Optional[bool] = None,
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
 ) -> List[EmailService]:
     """获取邮箱服务列表"""
     query = db.query(EmailService)
@@ -228,18 +240,17 @@ def get_email_services(
     if enabled is not None:
         query = query.filter(EmailService.enabled == enabled)
 
-    query = query.order_by(
-        asc(EmailService.priority),
-        desc(EmailService.last_used)
-    ).offset(skip).limit(limit)
+    query = (
+        query.order_by(asc(EmailService.priority), desc(EmailService.last_used))
+        .offset(skip)
+        .limit(limit)
+    )
 
     return query.all()
 
 
 def update_email_service(
-    db: Session,
-    service_id: int,
-    **kwargs
+    db: Session, service_id: int, **kwargs
 ) -> Optional[EmailService]:
     """更新邮箱服务配置"""
     db_service = get_email_service_by_id(db, service_id)
@@ -270,18 +281,19 @@ def delete_email_service(db: Session, service_id: int) -> bool:
 # 注册任务 CRUD
 # ============================================================================
 
+
 def create_registration_task(
     db: Session,
     task_uuid: str,
     email_service_id: Optional[int] = None,
-    proxy: Optional[str] = None
+    proxy: Optional[str] = None,
 ) -> RegistrationTask:
     """创建注册任务"""
     db_task = RegistrationTask(
         task_uuid=task_uuid,
         email_service_id=email_service_id,
         proxy=proxy,
-        status='pending'
+        status="pending",
     )
     db.add(db_task)
     db.commit()
@@ -289,16 +301,19 @@ def create_registration_task(
     return db_task
 
 
-def get_registration_task_by_uuid(db: Session, task_uuid: str) -> Optional[RegistrationTask]:
+def get_registration_task_by_uuid(
+    db: Session, task_uuid: str
+) -> Optional[RegistrationTask]:
     """根据 UUID 获取注册任务"""
-    return db.query(RegistrationTask).filter(RegistrationTask.task_uuid == task_uuid).first()
+    return (
+        db.query(RegistrationTask)
+        .filter(RegistrationTask.task_uuid == task_uuid)
+        .first()
+    )
 
 
 def get_registration_tasks(
-    db: Session,
-    status: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100
+    db: Session, status: Optional[str] = None, skip: int = 0, limit: int = 100
 ) -> List[RegistrationTask]:
     """获取注册任务列表"""
     query = db.query(RegistrationTask)
@@ -311,9 +326,7 @@ def get_registration_tasks(
 
 
 def update_registration_task(
-    db: Session,
-    task_uuid: str,
-    **kwargs
+    db: Session, task_uuid: str, **kwargs
 ) -> Optional[RegistrationTask]:
     """更新注册任务状态"""
     db_task = get_registration_task_by_uuid(db, task_uuid)
@@ -357,9 +370,11 @@ def delete_registration_task(db: Session, task_uuid: str) -> bool:
 
 def fail_incomplete_registration_tasks(db: Session, error_message: str) -> List[str]:
     """将服务重启后遗留的未完成任务标记为失败"""
-    tasks = db.query(RegistrationTask).filter(
-        RegistrationTask.status.in_(("pending", "running"))
-    ).all()
+    tasks = (
+        db.query(RegistrationTask)
+        .filter(RegistrationTask.status.in_(("pending", "running")))
+        .all()
+    )
 
     if not tasks:
         return []
@@ -392,6 +407,7 @@ get_registration_task = get_registration_task_by_uuid
 # 设置 CRUD
 # ============================================================================
 
+
 def get_setting(db: Session, key: str) -> Optional[Setting]:
     """获取设置"""
     return db.query(Setting).filter(Setting.key == key).first()
@@ -407,7 +423,7 @@ def set_setting(
     key: str,
     value: str,
     description: Optional[str] = None,
-    category: str = 'general'
+    category: str = "general",
 ) -> Setting:
     """设置或更新配置项"""
     db_setting = get_setting(db, key)
@@ -418,10 +434,7 @@ def set_setting(
         db_setting.updated_at = datetime.utcnow()
     else:
         db_setting = Setting(
-            key=key,
-            value=value,
-            description=description,
-            category=category
+            key=key, value=value, description=description, category=category
         )
         db.add(db_setting)
 
@@ -445,6 +458,7 @@ def delete_setting(db: Session, key: str) -> bool:
 # 代理 CRUD
 # ============================================================================
 
+
 def create_proxy(
     db: Session,
     name: str,
@@ -454,7 +468,7 @@ def create_proxy(
     username: Optional[str] = None,
     password: Optional[str] = None,
     enabled: bool = True,
-    priority: int = 0
+    priority: int = 0,
 ) -> Proxy:
     """创建代理配置"""
     db_proxy = Proxy(
@@ -465,7 +479,7 @@ def create_proxy(
         username=username,
         password=password,
         enabled=enabled,
-        priority=priority
+        priority=priority,
     )
     db.add(db_proxy)
     db.commit()
@@ -479,10 +493,7 @@ def get_proxy_by_id(db: Session, proxy_id: int) -> Optional[Proxy]:
 
 
 def get_proxies(
-    db: Session,
-    enabled: Optional[bool] = None,
-    skip: int = 0,
-    limit: int = 100
+    db: Session, enabled: Optional[bool] = None, skip: int = 0, limit: int = 100
 ) -> List[Proxy]:
     """获取代理列表"""
     query = db.query(Proxy)
@@ -494,7 +505,9 @@ def get_proxies(
     return query.all()
 
 
-def get_enabled_proxies(db: Session, exclude_ids: Optional[Iterable[int]] = None) -> List[Proxy]:
+def get_enabled_proxies(
+    db: Session, exclude_ids: Optional[Iterable[int]] = None
+) -> List[Proxy]:
     """获取所有启用的代理"""
     query = db.query(Proxy).filter(Proxy.enabled == True)
     excluded: Set[int] = {int(proxy_id) for proxy_id in (exclude_ids or [])}
@@ -503,11 +516,7 @@ def get_enabled_proxies(db: Session, exclude_ids: Optional[Iterable[int]] = None
     return query.all()
 
 
-def update_proxy(
-    db: Session,
-    proxy_id: int,
-    **kwargs
-) -> Optional[Proxy]:
+def update_proxy(db: Session, proxy_id: int, **kwargs) -> Optional[Proxy]:
     """更新代理配置"""
     db_proxy = get_proxy_by_id(db, proxy_id)
     if not db_proxy:
@@ -532,11 +541,15 @@ def delete_proxy(db: Session, proxy_id: int) -> bool:
     db.commit()
     return True
 
+
 def delete_disabled_proxies(db: Session) -> int:
     """删除所有已禁用代理"""
-    deleted = db.query(Proxy).filter(Proxy.enabled == False).delete(synchronize_session=False)
+    deleted = (
+        db.query(Proxy).filter(Proxy.enabled == False).delete(synchronize_session=False)
+    )
     db.commit()
     return deleted
+
 
 def update_proxy_last_used(db: Session, proxy_id: int) -> bool:
     """更新代理最后使用时间"""
@@ -549,12 +562,17 @@ def update_proxy_last_used(db: Session, proxy_id: int) -> bool:
     return True
 
 
-def get_random_proxy(db: Session, exclude_ids: Optional[Iterable[int]] = None) -> Optional[Proxy]:
+def get_random_proxy(
+    db: Session, exclude_ids: Optional[Iterable[int]] = None
+) -> Optional[Proxy]:
     """随机获取一个启用的代理，优先返回 is_default=True 的代理"""
     import random
+
     excluded: Set[int] = {int(proxy_id) for proxy_id in (exclude_ids or [])}
     # 优先返回默认代理
-    default_query = db.query(Proxy).filter(Proxy.enabled == True, Proxy.is_default == True)
+    default_query = db.query(Proxy).filter(
+        Proxy.enabled == True, Proxy.is_default == True
+    )
     if excluded:
         default_query = default_query.filter(~Proxy.id.in_(excluded))
     default_proxy = default_query.first()
@@ -601,6 +619,7 @@ def get_proxies_count(db: Session, enabled: Optional[bool] = None) -> int:
 # CPA 服务 CRUD
 # ============================================================================
 
+
 def create_cpa_service(
     db: Session,
     name: str,
@@ -608,7 +627,7 @@ def create_cpa_service(
     api_token: str,
     enabled: bool = True,
     include_proxy_url: bool = False,
-    priority: int = 0
+    priority: int = 0,
 ) -> CpaService:
     """创建 CPA 服务配置"""
     db_service = CpaService(
@@ -617,7 +636,7 @@ def create_cpa_service(
         api_token=api_token,
         enabled=enabled,
         include_proxy_url=include_proxy_url,
-        priority=priority
+        priority=priority,
     )
     db.add(db_service)
     db.commit()
@@ -630,10 +649,7 @@ def get_cpa_service_by_id(db: Session, service_id: int) -> Optional[CpaService]:
     return db.query(CpaService).filter(CpaService.id == service_id).first()
 
 
-def get_cpa_services(
-    db: Session,
-    enabled: Optional[bool] = None
-) -> List[CpaService]:
+def get_cpa_services(db: Session, enabled: Optional[bool] = None) -> List[CpaService]:
     """获取 CPA 服务列表"""
     query = db.query(CpaService)
     if enabled is not None:
@@ -641,11 +657,7 @@ def get_cpa_services(
     return query.order_by(asc(CpaService.priority), asc(CpaService.id)).all()
 
 
-def update_cpa_service(
-    db: Session,
-    service_id: int,
-    **kwargs
-) -> Optional[CpaService]:
+def update_cpa_service(db: Session, service_id: int, **kwargs) -> Optional[CpaService]:
     """更新 CPA 服务配置"""
     db_service = get_cpa_service_by_id(db, service_id)
     if not db_service:
@@ -672,13 +684,14 @@ def delete_cpa_service(db: Session, service_id: int) -> bool:
 # Sub2API 服务 CRUD
 # ============================================================================
 
+
 def create_sub2api_service(
     db: Session,
     name: str,
     api_url: str,
     api_key: str,
     enabled: bool = True,
-    priority: int = 0
+    priority: int = 0,
 ) -> Sub2ApiService:
     """创建 Sub2API 服务配置"""
     svc = Sub2ApiService(
@@ -700,8 +713,7 @@ def get_sub2api_service_by_id(db: Session, service_id: int) -> Optional[Sub2ApiS
 
 
 def get_sub2api_services(
-    db: Session,
-    enabled: Optional[bool] = None
+    db: Session, enabled: Optional[bool] = None
 ) -> List[Sub2ApiService]:
     """获取 Sub2API 服务列表"""
     query = db.query(Sub2ApiService)
@@ -710,7 +722,9 @@ def get_sub2api_services(
     return query.order_by(asc(Sub2ApiService.priority), asc(Sub2ApiService.id)).all()
 
 
-def update_sub2api_service(db: Session, service_id: int, **kwargs) -> Optional[Sub2ApiService]:
+def update_sub2api_service(
+    db: Session, service_id: int, **kwargs
+) -> Optional[Sub2ApiService]:
     """更新 Sub2API 服务配置"""
     svc = get_sub2api_service_by_id(db, service_id)
     if not svc:
@@ -736,6 +750,7 @@ def delete_sub2api_service(db: Session, service_id: int) -> bool:
 # Team Manager 服务 CRUD
 # ============================================================================
 
+
 def create_tm_service(
     db: Session,
     name: str,
@@ -746,6 +761,7 @@ def create_tm_service(
 ):
     """创建 Team Manager 服务配置"""
     from .models import TeamManagerService
+
     svc = TeamManagerService(
         name=name,
         api_url=api_url,
@@ -762,16 +778,22 @@ def create_tm_service(
 def get_tm_service_by_id(db: Session, service_id: int):
     """按 ID 获取 Team Manager 服务"""
     from .models import TeamManagerService
-    return db.query(TeamManagerService).filter(TeamManagerService.id == service_id).first()
+
+    return (
+        db.query(TeamManagerService).filter(TeamManagerService.id == service_id).first()
+    )
 
 
 def get_tm_services(db: Session, enabled=None):
     """获取 Team Manager 服务列表"""
     from .models import TeamManagerService
+
     q = db.query(TeamManagerService)
     if enabled is not None:
         q = q.filter(TeamManagerService.enabled == enabled)
-    return q.order_by(TeamManagerService.priority.asc(), TeamManagerService.id.asc()).all()
+    return q.order_by(
+        TeamManagerService.priority.asc(), TeamManagerService.id.asc()
+    ).all()
 
 
 def update_tm_service(db: Session, service_id: int, **kwargs):
@@ -853,14 +875,21 @@ def delete_newapi_service(db: Session, service_id: int) -> bool:
     db.commit()
     return True
 
-def update_outlook_refresh_token(db: Session, service_id: int, email: str, new_refresh_token: str):
+
+def update_outlook_refresh_token(
+    db: Session, service_id: int, email: str, new_refresh_token: str
+):
     """更新 EmailService.config 中指定邮箱的 refresh_token"""
     service = db.query(EmailService).filter(EmailService.id == service_id).first()
     if not service or not isinstance(service.config, dict):
         return
 
     normalized_email = (email or "").strip().lower()
-    if not normalized_email or not isinstance(new_refresh_token, str) or not new_refresh_token:
+    if (
+        not normalized_email
+        or not isinstance(new_refresh_token, str)
+        or not new_refresh_token
+    ):
         return
 
     config = dict(service.config)
@@ -885,3 +914,69 @@ def update_outlook_refresh_token(db: Session, service_id: int, email: str, new_r
     service.config = config
     flag_modified(service, "config")
     db.commit()
+
+
+# ============================================================================
+# Codex2API 服务 CRUD
+# ============================================================================
+
+
+def create_codex2api_service(
+    db: Session,
+    name: str,
+    api_url: str,
+    api_key: str,
+    enabled: bool = True,
+    include_proxy_url: bool = True,
+    priority: int = 0,
+) -> Codex2ApiService:
+    """创建 Codex2API 服务配置"""
+    svc = Codex2ApiService(
+        name=name,
+        api_url=api_url,
+        api_key=api_key,
+        enabled=enabled,
+        include_proxy_url=include_proxy_url,
+        priority=priority,
+    )
+    db.add(svc)
+    db.commit()
+    db.refresh(svc)
+    return svc
+
+
+def get_codex2api_service_by_id(
+    db: Session, service_id: int
+) -> Optional[Codex2ApiService]:
+    """按 ID 获取 Codex2API 服务"""
+    return db.query(Codex2ApiService).filter(Codex2ApiService.id == service_id).first()
+
+
+def get_codex2api_services(db: Session, enabled=None):
+    """获取 Codex2API 服务列表"""
+    q = db.query(Codex2ApiService)
+    if enabled is not None:
+        q = q.filter(Codex2ApiService.enabled == enabled)
+    return q.order_by(Codex2ApiService.priority.asc(), Codex2ApiService.id.asc()).all()
+
+
+def update_codex2api_service(db: Session, service_id: int, **kwargs):
+    """更新 Codex2API 服务配置"""
+    svc = get_codex2api_service_by_id(db, service_id)
+    if not svc:
+        return None
+    for k, v in kwargs.items():
+        setattr(svc, k, v)
+    db.commit()
+    db.refresh(svc)
+    return svc
+
+
+def delete_codex2api_service(db: Session, service_id: int) -> bool:
+    """删除 Codex2API 服务配置"""
+    svc = get_codex2api_service_by_id(db, service_id)
+    if not svc:
+        return False
+    db.delete(svc)
+    db.commit()
+    return True

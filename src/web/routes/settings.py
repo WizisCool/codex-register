@@ -19,8 +19,10 @@ router = APIRouter()
 
 # ============== Pydantic Models ==============
 
+
 class SettingItem(BaseModel):
     """设置项"""
+
     key: str
     value: str
     description: Optional[str] = None
@@ -29,11 +31,13 @@ class SettingItem(BaseModel):
 
 class SettingUpdateRequest(BaseModel):
     """设置更新请求"""
+
     value: str
 
 
 class ProxySettings(BaseModel):
     """代理设置"""
+
     enabled: bool = False
     type: str = "http"  # http, socks5
     host: str = "127.0.0.1"
@@ -44,6 +48,7 @@ class ProxySettings(BaseModel):
 
 class RegistrationSettings(BaseModel):
     """注册设置"""
+
     max_retries: int = 3
     timeout: int = 120
     default_password_length: int = 12
@@ -53,6 +58,7 @@ class RegistrationSettings(BaseModel):
 
 class WebUISettings(BaseModel):
     """Web UI 设置"""
+
     host: Optional[str] = None
     port: Optional[int] = None
     debug: Optional[bool] = None
@@ -61,12 +67,14 @@ class WebUISettings(BaseModel):
 
 class AllSettings(BaseModel):
     """所有设置"""
+
     proxy: ProxySettings
     registration: RegistrationSettings
     webui: WebUISettings
 
 
 # ============== API Endpoints ==============
+
 
 @router.get("")
 async def get_all_settings():
@@ -85,7 +93,10 @@ async def get_all_settings():
             "dynamic_api_url": settings.proxy_dynamic_api_url,
             "dynamic_api_key_header": settings.proxy_dynamic_api_key_header,
             "dynamic_result_field": settings.proxy_dynamic_result_field,
-            "has_dynamic_api_key": bool(settings.proxy_dynamic_api_key and settings.proxy_dynamic_api_key.get_secret_value()),
+            "has_dynamic_api_key": bool(
+                settings.proxy_dynamic_api_key
+                and settings.proxy_dynamic_api_key.get_secret_value()
+            ),
         },
         "registration": {
             "max_retries": settings.registration_max_retries,
@@ -98,7 +109,10 @@ async def get_all_settings():
             "host": settings.webui_host,
             "port": settings.webui_port,
             "debug": settings.debug,
-            "has_access_password": bool(settings.webui_access_password and settings.webui_access_password.get_secret_value()),
+            "has_access_password": bool(
+                settings.webui_access_password
+                and settings.webui_access_password.get_secret_value()
+            ),
         },
         "tempmail": {
             "base_url": settings.tempmail_base_url,
@@ -121,12 +135,16 @@ async def get_dynamic_proxy_settings():
         "api_url": settings.proxy_dynamic_api_url,
         "api_key_header": settings.proxy_dynamic_api_key_header,
         "result_field": settings.proxy_dynamic_result_field,
-        "has_api_key": bool(settings.proxy_dynamic_api_key and settings.proxy_dynamic_api_key.get_secret_value()),
+        "has_api_key": bool(
+            settings.proxy_dynamic_api_key
+            and settings.proxy_dynamic_api_key.get_secret_value()
+        ),
     }
 
 
 class DynamicProxySettings(BaseModel):
     """动态代理设置"""
+
     enabled: bool = False
     api_url: str = ""
     api_key: Optional[str] = None
@@ -178,6 +196,7 @@ async def test_dynamic_proxy(request: DynamicProxySettings):
     # 用获取到的代理测试连通性
     import time
     from curl_cffi import requests as cffi_requests
+
     try:
         proxies = {"http": proxy_url, "https": proxy_url}
         start = time.time()
@@ -185,16 +204,29 @@ async def test_dynamic_proxy(request: DynamicProxySettings):
             "https://api.ipify.org?format=json",
             proxies=proxies,
             timeout=10,
-            impersonate="chrome110"
+            impersonate="chrome110",
         )
         elapsed = round((time.time() - start) * 1000)
         if resp.status_code == 200:
             ip = resp.json().get("ip", "")
-            return {"success": True, "proxy_url": proxy_url, "ip": ip, "response_time": elapsed,
-                    "message": f"动态代理可用，出口 IP: {ip}，响应时间: {elapsed}ms"}
-        return {"success": False, "proxy_url": proxy_url, "message": f"代理连接失败: HTTP {resp.status_code}"}
+            return {
+                "success": True,
+                "proxy_url": proxy_url,
+                "ip": ip,
+                "response_time": elapsed,
+                "message": f"动态代理可用，出口 IP: {ip}，响应时间: {elapsed}ms",
+            }
+        return {
+            "success": False,
+            "proxy_url": proxy_url,
+            "message": f"代理连接失败: HTTP {resp.status_code}",
+        }
     except Exception as e:
-        return {"success": False, "proxy_url": proxy_url, "message": f"代理连接失败: {e}"}
+        return {
+            "success": False,
+            "proxy_url": proxy_url,
+            "message": f"代理连接失败: {e}",
+        }
 
 
 @router.get("/registration")
@@ -291,6 +323,7 @@ async def backup_database():
 
     # 创建备份目录
     from pathlib import Path as FilePath
+
     backup_dir = FilePath(db_path).parent / "backups"
     backup_dir.mkdir(exist_ok=True)
 
@@ -304,15 +337,12 @@ async def backup_database():
     return {
         "success": True,
         "message": "数据库备份成功",
-        "backup_path": str(backup_path)
+        "backup_path": str(backup_path),
     }
 
 
 @router.post("/database/cleanup")
-async def cleanup_database(
-    days: int = 30,
-    keep_failed: bool = True
-):
+async def cleanup_database(days: int = 30, keep_failed: bool = True):
     """清理过期数据"""
     from datetime import datetime, timedelta
 
@@ -329,9 +359,7 @@ async def cleanup_database(
         else:
             conditions.append(RegistrationTask.status.in_(["completed", "cancelled"]))
 
-        result = db.execute(
-            delete(RegistrationTask).where(*conditions)
-        )
+        result = db.execute(delete(RegistrationTask).where(*conditions))
         db.commit()
 
         deleted_count = result.rowcount
@@ -339,15 +367,12 @@ async def cleanup_database(
     return {
         "success": True,
         "message": f"已清理 {deleted_count} 条过期任务记录",
-        "deleted_count": deleted_count
+        "deleted_count": deleted_count,
     }
 
 
 @router.get("/logs")
-async def get_recent_logs(
-    lines: int = 100,
-    level: str = "INFO"
-):
+async def get_recent_logs(lines: int = 100, level: str = "INFO"):
     """获取最近日志"""
     settings = get_settings()
 
@@ -356,6 +381,7 @@ async def get_recent_logs(
         return {"logs": [], "message": "日志文件未配置"}
 
     from pathlib import Path
+
     log_path = Path(log_file)
 
     if not log_path.exists():
@@ -368,7 +394,7 @@ async def get_recent_logs(
 
         return {
             "logs": [line.strip() for line in recent_lines],
-            "total_lines": len(all_lines)
+            "total_lines": len(all_lines),
         }
     except Exception as e:
         return {"logs": [], "error": str(e)}
@@ -376,14 +402,21 @@ async def get_recent_logs(
 
 # ============== 临时邮箱设置 ==============
 
+
 class TempmailSettings(BaseModel):
     """临时邮箱设置"""
+
     api_url: Optional[str] = None
-    enabled: bool = True
+    api_key: Optional[str] = None
+    custom_domain: Optional[str] = None
+    enable_random_subdomain: Optional[bool] = None
+    subdomain_length: Optional[int] = None
+    enabled: Optional[bool] = None
 
 
 class EmailCodeSettings(BaseModel):
     """验证码等待设置"""
+
     timeout: int = 120  # 验证码等待超时（秒）
     poll_interval: int = 3  # 验证码轮询间隔（秒）
     resend_max_retries: int = 2  # 收件箱未找到验证码时最多重新发送次数
@@ -398,7 +431,7 @@ async def get_tempmail_settings():
         "api_url": settings.tempmail_base_url,
         "timeout": settings.tempmail_timeout,
         "max_retries": settings.tempmail_max_retries,
-        "enabled": True  # 临时邮箱默认可用
+        "enabled": True,  # 临时邮箱默认可用
     }
 
 
@@ -409,6 +442,18 @@ async def update_tempmail_settings(request: TempmailSettings):
 
     if request.api_url:
         update_dict["tempmail_base_url"] = request.api_url
+    if request.api_key:
+        update_dict["tempmail_api_key"] = request.api_key
+    if request.custom_domain:
+        update_dict["tempmail_custom_domain"] = request.custom_domain
+    if request.enable_random_subdomain is not None:
+        update_dict["tempmail_enable_random_subdomain"] = (
+            request.enable_random_subdomain
+        )
+    if request.subdomain_length:
+        update_dict["tempmail_subdomain_length"] = request.subdomain_length
+    if request.enabled is not None:
+        update_dict["tempmail_enabled"] = request.enabled
 
     update_settings(**update_dict)
 
@@ -416,6 +461,7 @@ async def update_tempmail_settings(request: TempmailSettings):
 
 
 # ============== 验证码等待设置 ==============
+
 
 @router.get("/email-code")
 async def get_email_code_settings():
@@ -451,8 +497,10 @@ async def update_email_code_settings(request: EmailCodeSettings):
 
 # ============== 代理列表 CRUD ==============
 
+
 class ProxyCreateRequest(BaseModel):
     """创建代理请求"""
+
     name: str
     type: str = "http"  # http, socks5
     host: str
@@ -465,6 +513,7 @@ class ProxyCreateRequest(BaseModel):
 
 class ProxyUpdateRequest(BaseModel):
     """更新代理请求"""
+
     name: Optional[str] = None
     type: Optional[str] = None
     host: Optional[str] = None
@@ -474,6 +523,7 @@ class ProxyUpdateRequest(BaseModel):
     enabled: Optional[bool] = None
     priority: Optional[int] = None
 
+
 def _test_proxy_connectivity(proxy_url: str) -> dict:
     """测试代理连通性并返回统一结果。"""
     import time
@@ -482,16 +532,10 @@ def _test_proxy_connectivity(proxy_url: str) -> dict:
     test_url = "https://api.ipify.org?format=json"
     start_time = time.time()
 
-    proxies_dict = {
-        "http": proxy_url,
-        "https": proxy_url
-    }
+    proxies_dict = {"http": proxy_url, "https": proxy_url}
 
     response = cffi_requests.get(
-        test_url,
-        proxies=proxies_dict,
-        timeout=3,
-        impersonate="chrome110"
+        test_url, proxies=proxies_dict, timeout=3, impersonate="chrome110"
     )
 
     elapsed_time = time.time() - start_time
@@ -501,13 +545,10 @@ def _test_proxy_connectivity(proxy_url: str) -> dict:
             "success": True,
             "ip": ip_info.get("ip", ""),
             "response_time": round(elapsed_time * 1000),
-            "message": f"代理连接成功，出口 IP: {ip_info.get('ip', 'unknown')}"
+            "message": f"代理连接成功，出口 IP: {ip_info.get('ip', 'unknown')}",
         }
 
-    return {
-        "success": False,
-        "message": f"状态码: {response.status_code}"
-    }
+    return {"success": False, "message": f"状态码: {response.status_code}"}
 
 
 def _auto_disable_proxy_on_failure(db, proxy, message: str) -> dict:
@@ -527,15 +568,13 @@ def _auto_disable_proxy_on_failure(db, proxy, message: str) -> dict:
         "message": final_message,
     }
 
+
 @router.get("/proxies")
 async def get_proxies_list(enabled: Optional[bool] = None):
     """获取代理列表"""
     with get_db() as db:
         proxies = crud.get_proxies(db, enabled=enabled)
-        return {
-            "proxies": [p.to_dict() for p in proxies],
-            "total": len(proxies)
-        }
+        return {"proxies": [p.to_dict() for p in proxies], "total": len(proxies)}
 
 
 @router.post("/proxies")
@@ -551,7 +590,7 @@ async def create_proxy_item(request: ProxyCreateRequest):
             username=request.username,
             password=request.password,
             enabled=request.enabled,
-            priority=request.priority
+            priority=request.priority,
         )
         return {"success": True, "proxy": proxy.to_dict()}
 
@@ -626,6 +665,7 @@ async def unset_proxy_default(proxy_id: int):
 
 class ProxyBatchImportRequest(BaseModel):
     """批量导入代理请求"""
+
     lines: str
 
 
@@ -641,19 +681,19 @@ def _parse_proxy_line(line: str):
 
     name = None
     # 解析可选名称前缀（竖线分隔）
-    if '|' in line:
-        name, line = line.split('|', 1)
+    if "|" in line:
+        name, line = line.split("|", 1)
         name = name.strip()
         line = line.strip()
 
     # 若没有协议头，默认补 http://
-    if '://' not in line:
-        line = 'http://' + line
+    if "://" not in line:
+        line = "http://" + line
 
     parsed = urlparse(line)
-    proxy_type = (parsed.scheme or 'http').lower()
-    if proxy_type not in ('http', 'https', 'socks5', 'socks4'):
-        proxy_type = 'http'
+    proxy_type = (parsed.scheme or "http").lower()
+    if proxy_type not in ("http", "https", "socks5", "socks4"):
+        proxy_type = "http"
 
     host = parsed.hostname
     port = parsed.port
@@ -685,7 +725,9 @@ async def batch_import_proxies(request: ProxyBatchImportRequest):
             if not line or line.startswith("#"):
                 continue
             try:
-                name, proxy_type, host, port, username, password = _parse_proxy_line(line)
+                name, proxy_type, host, port, username, password = _parse_proxy_line(
+                    line
+                )
                 crud.create_proxy(
                     db,
                     name=name,
@@ -718,16 +760,10 @@ async def test_proxy_item(proxy_id: int):
         start_time = time.time()
 
         try:
-            proxies = {
-                "http": proxy_url,
-                "https": proxy_url
-            }
+            proxies = {"http": proxy_url, "https": proxy_url}
 
             response = cffi_requests.get(
-                test_url,
-                proxies=proxies,
-                timeout=3,
-                impersonate="chrome110"
+                test_url, proxies=proxies, timeout=3, impersonate="chrome110"
             )
 
             elapsed_time = time.time() - start_time
@@ -738,19 +774,16 @@ async def test_proxy_item(proxy_id: int):
                     "success": True,
                     "ip": ip_info.get("ip", ""),
                     "response_time": round(elapsed_time * 1000),
-                    "message": f"代理连接成功，出口 IP: {ip_info.get('ip', 'unknown')}"
+                    "message": f"代理连接成功，出口 IP: {ip_info.get('ip', 'unknown')}",
                 }
             else:
                 return {
                     "success": False,
-                    "message": f"代理返回错误状态码: {response.status_code}"
+                    "message": f"代理返回错误状态码: {response.status_code}",
                 }
 
         except Exception as e:
-            return {
-                "success": False,
-                "message": f"代理连接失败: {str(e)}"
-            }
+            return {"success": False, "message": f"代理连接失败: {str(e)}"}
 
 
 @router.post("/proxies/test-all")
@@ -769,51 +802,51 @@ async def test_all_proxies():
             start_time = time.time()
 
             try:
-                proxies_dict = {
-                    "http": proxy_url,
-                    "https": proxy_url
-                }
+                proxies_dict = {"http": proxy_url, "https": proxy_url}
 
                 response = cffi_requests.get(
-                    test_url,
-                    proxies=proxies_dict,
-                    timeout=3,
-                    impersonate="chrome110"
+                    test_url, proxies=proxies_dict, timeout=3, impersonate="chrome110"
                 )
 
                 elapsed_time = time.time() - start_time
 
                 if response.status_code == 200:
                     ip_info = response.json()
-                    results.append({
-                        "id": proxy.id,
-                        "name": proxy.name,
-                        "success": True,
-                        "ip": ip_info.get("ip", ""),
-                        "response_time": round(elapsed_time * 1000)
-                    })
+                    results.append(
+                        {
+                            "id": proxy.id,
+                            "name": proxy.name,
+                            "success": True,
+                            "ip": ip_info.get("ip", ""),
+                            "response_time": round(elapsed_time * 1000),
+                        }
+                    )
                 else:
-                    results.append({
+                    results.append(
+                        {
+                            "id": proxy.id,
+                            "name": proxy.name,
+                            "success": False,
+                            "message": f"状态码: {response.status_code}",
+                        }
+                    )
+
+            except Exception as e:
+                results.append(
+                    {
                         "id": proxy.id,
                         "name": proxy.name,
                         "success": False,
-                        "message": f"状态码: {response.status_code}"
-                    })
-
-            except Exception as e:
-                results.append({
-                    "id": proxy.id,
-                    "name": proxy.name,
-                    "success": False,
-                    "message": str(e)
-                })
+                        "message": str(e),
+                    }
+                )
 
         success_count = sum(1 for r in results if r["success"])
         return {
             "total": len(proxies),
             "success": success_count,
             "failed": len(proxies) - success_count,
-            "results": results
+            "results": results,
         }
 
 
@@ -839,8 +872,10 @@ async def disable_proxy(proxy_id: int):
 
 # ============== Outlook 设置 ==============
 
+
 class OutlookSettings(BaseModel):
     """Outlook 设置"""
+
     default_client_id: Optional[str] = None
 
 
@@ -873,8 +908,10 @@ async def update_outlook_settings(request: OutlookSettings):
 
 # ============== Team Manager 设置 ==============
 
+
 class TeamManagerSettings(BaseModel):
     """Team Manager 设置"""
+
     enabled: bool = False
     api_url: str = ""
     api_key: str = ""
@@ -882,6 +919,7 @@ class TeamManagerSettings(BaseModel):
 
 class TeamManagerTestRequest(BaseModel):
     """Team Manager 测试请求"""
+
     api_url: str
     api_key: str
 
@@ -893,7 +931,9 @@ async def get_team_manager_settings():
     return {
         "enabled": settings.tm_enabled,
         "api_url": settings.tm_api_url,
-        "has_api_key": bool(settings.tm_api_key and settings.tm_api_key.get_secret_value()),
+        "has_api_key": bool(
+            settings.tm_api_key and settings.tm_api_key.get_secret_value()
+        ),
     }
 
 
@@ -913,11 +953,13 @@ async def update_team_manager_settings(request: TeamManagerSettings):
 @router.post("/team-manager/test")
 async def test_team_manager_connection(request: TeamManagerTestRequest):
     """测试 Team Manager 连接"""
-    from ...core.upload.team_manager_upload import test_team_manager_connection as do_test
+    from ...core.upload.team_manager_upload import (
+        test_team_manager_connection as do_test,
+    )
 
     settings = get_settings()
     api_key = request.api_key
-    if api_key == 'use_saved_key' or not api_key:
+    if api_key == "use_saved_key" or not api_key:
         if settings.tm_api_key:
             api_key = settings.tm_api_key.get_secret_value()
         else:

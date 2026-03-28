@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 def _build_sqlalchemy_url(database_url: str) -> str:
     if database_url.startswith("postgresql://"):
-        return "postgresql+psycopg://" + database_url[len("postgresql://"):]
+        return "postgresql+psycopg://" + database_url[len("postgresql://") :]
     if database_url.startswith("postgres://"):
-        return "postgresql+psycopg://" + database_url[len("postgres://"):]
+        return "postgresql+psycopg://" + database_url[len("postgres://") :]
     return database_url
 
 
@@ -28,16 +28,17 @@ class DatabaseSessionManager:
 
     def __init__(self, database_url: str = None):
         if database_url is None:
-            env_url = os.environ.get("APP_DATABASE_URL") or os.environ.get("DATABASE_URL")
+            env_url = os.environ.get("APP_DATABASE_URL") or os.environ.get(
+                "DATABASE_URL"
+            )
             if env_url:
                 database_url = env_url
             else:
                 # 优先使用 APP_DATA_DIR 环境变量（PyInstaller 打包后由 webui.py 设置）
-                data_dir = os.environ.get('APP_DATA_DIR') or os.path.join(
-                    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                    'data'
+                data_dir = os.environ.get("APP_DATA_DIR") or os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data"
                 )
-                db_path = os.path.join(data_dir, 'database.db')
+                db_path = os.path.join(data_dir, "database.db")
                 # 确保目录存在
                 os.makedirs(data_dir, exist_ok=True)
                 database_url = f"sqlite:///{db_path}"
@@ -45,11 +46,15 @@ class DatabaseSessionManager:
         self.database_url = _build_sqlalchemy_url(database_url)
         self.engine = create_engine(
             self.database_url,
-            connect_args={"check_same_thread": False, "timeout": 30} if self.database_url.startswith("sqlite") else {},
+            connect_args={"check_same_thread": False, "timeout": 30}
+            if self.database_url.startswith("sqlite")
+            else {},
             echo=False,  # 设置为 True 可以查看所有 SQL 语句
-            pool_pre_ping=True  # 连接池预检查
+            pool_pre_ping=True,  # 连接池预检查
         )
-        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        self.SessionLocal = sessionmaker(
+            autocommit=False, autoflush=False, bind=self.engine
+        )
 
     def get_db(self) -> Generator[Session, None, None]:
         """
@@ -119,6 +124,7 @@ class DatabaseSessionManager:
             ("newapi_services", "channel_models", "TEXT"),
             ("proxies", "is_default", "BOOLEAN DEFAULT 0"),
             ("cpa_services", "include_proxy_url", "BOOLEAN DEFAULT 0"),
+            ("codex2api_services", "include_proxy_url", "BOOLEAN DEFAULT 1"),
         ]
 
         # 确保新表存在（create_tables 已处理，此处兜底）
@@ -127,8 +133,16 @@ class DatabaseSessionManager:
         with self.engine.connect() as conn:
             # 数据迁移：将旧的 custom_domain 记录统一为 moe_mail
             try:
-                conn.execute(text("UPDATE email_services SET service_type='moe_mail' WHERE service_type='custom_domain'"))
-                conn.execute(text("UPDATE accounts SET email_service='moe_mail' WHERE email_service='custom_domain'"))
+                conn.execute(
+                    text(
+                        "UPDATE email_services SET service_type='moe_mail' WHERE service_type='custom_domain'"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE accounts SET email_service='moe_mail' WHERE email_service='custom_domain'"
+                    )
+                )
                 conn.commit()
             except Exception as e:
                 logger.warning(f"迁移 custom_domain -> moe_mail 时出错: {e}")
@@ -136,15 +150,19 @@ class DatabaseSessionManager:
             for table_name, column_name, column_type in migrations:
                 try:
                     # 检查列是否存在
-                    result = conn.execute(text(
-                        f"SELECT * FROM pragma_table_info('{table_name}') WHERE name='{column_name}'"
-                    ))
+                    result = conn.execute(
+                        text(
+                            f"SELECT * FROM pragma_table_info('{table_name}') WHERE name='{column_name}'"
+                        )
+                    )
                     if result.fetchone() is None:
                         # 列不存在，添加它
                         logger.info(f"添加列 {table_name}.{column_name}")
-                        conn.execute(text(
-                            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
-                        ))
+                        conn.execute(
+                            text(
+                                f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                            )
+                        )
                         conn.commit()
                         logger.info(f"成功添加列 {table_name}.{column_name}")
                 except Exception as e:

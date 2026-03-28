@@ -167,20 +167,49 @@
             <!-- 临时邮箱配置 -->
             <div class="card">
                 <div class="card-header">
-                    <h3>🌐 临时邮箱配置</h3>
+                    <h3>🌐 临时邮箱配置 (Tempmail.lol)</h3>
                 </div>
                 <div class="card-body">
                     <form id="tempmail-form">
                         <div class="form-group">
-                            <label for="tempmail-api">Tempmail.lol API 地址</label>
-                            <input type="text" id="tempmail-api" name="api_url" placeholder="https://tempmail.lol/api">
+                            <label for="tempmail-api">API 地址</label>
+                            <input type="text" id="tempmail-api" name="api_url" placeholder="https://api.tempmail.lol/v2" value="https://api.tempmail.lol/v2">
+                            <small class="form-help">Tempmail.lol API 基础地址，默认使用 v2 版本</small>
                         </div>
+
+                        <div class="form-group">
+                            <label for="tempmail-api-key">API Key (可选)</label>
+                            <input type="password" id="tempmail-api-key" name="api_key" placeholder="Plus/Ultra 用户填写，免费用户留空">
+                            <small class="form-help">Plus/Ultra 用户的 API 密钥，用于访问付费功能（自定义域名等）</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="tempmail-custom-domain">自定义域名 (可选)</label>
+                            <input type="text" id="tempmail-custom-domain" name="custom_domain" placeholder="例如: mydomain.com">
+                            <small class="form-help">在 Tempmail.lol 官网验证过的自定义根域名（仅 Plus/Ultra）</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="tempmail-enable-subdomain">
+                                启用随机子域
+                            </label>
+                            <small class="form-help">自动在自定义域名前添加随机前缀（如 abc123.mydomain.com），绕过域名检测</small>
+                        </div>
+
+                        <div class="form-group" id="subdomain-length-group" style="display: none;">
+                            <label for="tempmail-subdomain-length">子域长度</label>
+                            <input type="number" id="tempmail-subdomain-length" name="subdomain_length" value="8" min="4" max="20">
+                            <small class="form-help">随机子域前缀的长度（4-20 字符）</small>
+                        </div>
+
                         <div class="form-group">
                             <label>
                                 <input type="checkbox" id="tempmail-enabled" checked>
-                                启用临时邮箱
+                                启用临时邮箱服务
                             </label>
                         </div>
+
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary">💾 保存设置</button>
                             <button type="button" class="btn btn-secondary" id="test-tempmail-btn">🔌 测试连接</button>
